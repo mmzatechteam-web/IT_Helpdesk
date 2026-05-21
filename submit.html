@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Submit a Request · IT Helpdesk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="helpdesk.css">
+</head>
+<body>
+<div class="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="mark">Helpdesk</span>
+      <span class="sub">IT Support</span>
+    </div>
+  </header>
+
+  <main class="main main-narrow">
+    <div id="view"></div>
+    <div class="footnote">Internal use only · Submit one ticket per issue</div>
+  </main>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+// ============================================================================
+// CONFIG - paste your Supabase project values here
+// ============================================================================
+const SUPABASE_URL      = 'https://xqthyetsktfumudiizdb.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhxdGh5ZXRza3RmdW11ZGlpemRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkzNjQ5NzYsImV4cCI6MjA5NDk0MDk3Nn0.JsucXOp1atPVOsr0fbWXMK8Tb43Ag9snRgQ_Lbf5u0c';
+// ============================================================================
+
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const view = document.getElementById('view');
+
+const CATEGORIES = ['Hardware', 'Software', 'Network', 'Access / Account', 'Other'];
+const PRIORITIES = [
+  { value: 'low',    label: 'Low — minor inconvenience' },
+  { value: 'medium', label: 'Medium — affecting my work' },
+  { value: 'high',   label: 'High — blocking my work' },
+  { value: 'urgent', label: 'Urgent — system down / many people affected' }
+];
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+
+function renderForm(flash) {
+  view.innerHTML = `
+    <div class="eyebrow">New request</div>
+    <h1 class="section-title">Submit a request</h1>
+    <p class="section-lede">
+      Tell us what's going on. Be specific — error messages, what you were doing,
+      and how urgent it is all help us resolve things faster.
+    </p>
+
+    ${flash ? `<div class="flash flash-error">${esc(flash)}</div>` : ''}
+
+    <div class="card">
+      <form id="ticketForm" autocomplete="on">
+        <div class="field-row">
+          <div class="field">
+            <label for="name">Your name</label>
+            <input class="input" id="name" name="name" required maxlength="100" autocomplete="name">
+          </div>
+          <div class="field">
+            <label for="email">Your email</label>
+            <input class="input" id="email" name="email" type="email" required maxlength="200" autocomplete="email">
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="category">Category</label>
+            <select class="select" id="category" name="category" required>
+              <option value="">Choose one…</option>
+              ${CATEGORIES.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field">
+            <label for="priority">Priority</label>
+            <select class="select" id="priority" name="priority" required>
+              ${PRIORITIES.map(p => `
+                <option value="${p.value}" ${p.value==='medium'?'selected':''}>${esc(p.label)}</option>
+              `).join('')}
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="title">Subject</label>
+          <input class="input" id="title" name="title" required maxlength="200"
+                 placeholder="One-line summary of the issue">
+        </div>
+
+        <div class="field">
+          <label for="description">Description</label>
+          <textarea class="textarea" id="description" name="description" required maxlength="4000"
+                    placeholder="What's happening? What did you try? Include any error messages."></textarea>
+        </div>
+
+        <button type="submit" class="btn btn-accent" id="submitBtn">Submit request</button>
+      </form>
+    </div>
+  `;
+
+  document.getElementById('ticketForm').addEventListener('submit', onSubmit);
+}
+
+async function onSubmit(e) {
+  e.preventDefault();
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  btn.textContent = 'Submitting…';
+
+  const f = e.target;
+  const payload = {
+    submitter_name:  f.name.value.trim(),
+    submitter_email: f.email.value.trim(),
+    category:        f.category.value,
+    priority:        f.priority.value,
+    title:           f.title.value.trim(),
+    description:     f.description.value.trim()
+  };
+
+  const { data, error } = await db
+    .from('tickets')
+    .insert(payload)
+    .select('ticket_number, created_at')
+    .single();
+
+  if (error) {
+    renderForm('Could not submit: ' + error.message + '. Please try again or contact IT directly.');
+    return;
+  }
+
+  renderConfirmation(data, payload);
+}
+
+function renderConfirmation(data, payload) {
+  const tnum = String(data.ticket_number).padStart(4, '0');
+  view.innerHTML = `
+    <div class="eyebrow">Confirmation</div>
+    <h1 class="section-title">Request received.</h1>
+    <p class="section-lede">
+      Thanks ${esc(payload.submitter_name.split(' ')[0])}. Your ticket is in the queue —
+      IT will reach out to ${esc(payload.submitter_email)} with updates.
+    </p>
+
+    <div class="card">
+      <div class="eyebrow">Your reference number</div>
+      <div class="tnum-large">T-${tnum}</div>
+
+      <div style="margin-top:28px; padding-top:24px; border-top:1px solid var(--line);">
+        <div style="display:flex; gap:16px; flex-wrap:wrap; align-items:center;">
+          <span class="pill pill-status-open">Open</span>
+          <span class="pill pill-priority-${payload.priority}">${esc(payload.priority)}</span>
+          <span class="tnum">${esc(payload.category)}</span>
+        </div>
+        <h3 style="margin-top:14px; font-size:17px; font-weight:600;">${esc(payload.title)}</h3>
+        <p style="margin-top:8px; color:var(--ink-2); white-space:pre-wrap; font-size:13px;">${esc(payload.description)}</p>
+      </div>
+
+      <div style="margin-top:28px;">
+        <button class="btn btn-ghost" id="newBtn">Submit another request</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('newBtn').addEventListener('click', () => renderForm());
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// Quick config sanity check
+if (SUPABASE_URL.startsWith('YOUR_') || SUPABASE_ANON_KEY.startsWith('YOUR_')) {
+  view.innerHTML = `
+    <h1 class="section-title">Setup needed.</h1>
+    <p class="section-lede">
+      Open <code style="font-family:var(--mono); background:var(--surface-2); padding:2px 6px;">submit.html</code>
+      in a text editor and paste your Supabase project URL and anon key at the top of the script.
+      See <code style="font-family:var(--mono); background:var(--surface-2); padding:2px 6px;">README.md</code> for the full setup walkthrough.
+    </p>
+  `;
+} else {
+  renderForm();
+}
+</script>
+</body>
+</html>

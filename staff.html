@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Staff Dashboard · IT Helpdesk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="helpdesk.css">
+<style>
+/* ---- Staff-only styles (modern revision) ---- */
+.login-shell { display: grid; place-items: center; min-height: 100vh; padding: 20px; background: var(--bg); }
+.login-card {
+  width: 100%; max-width: 380px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  padding: 32px;
+  border-radius: var(--r-xl);
+}
+.stats-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin-bottom: 24px;
+}
+.stat-tile {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 18px 20px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
+  display: flex; flex-direction: column; align-items: flex-start;
+  color: var(--ink);
+  border-radius: var(--r-lg);
+}
+.stat-tile:hover { border-color: var(--ink-3); }
+.stat-tile.active { border-color: var(--ink); background: var(--ink); color: var(--surface); }
+.stat-value {
+  font-family: var(--sans); font-size: 28px; font-weight: 600;
+  letter-spacing: -0.02em; margin-bottom: 4px;
+}
+.stat-label {
+  font-family: var(--sans); font-size: 13px; color: var(--ink-3); font-weight: 400;
+}
+.stat-tile.active .stat-label { color: rgba(255,255,255,0.7); }
+
+.toolbar { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+.toolbar .search { flex: 1; min-width: 220px; }
+.toolbar .select { width: auto; min-width: 150px; }
+
+.tickets-table {
+  width: 100%; background: var(--surface);
+  border: 1px solid var(--line); border-collapse: separate; border-spacing: 0;
+  border-radius: var(--r-lg); overflow: hidden;
+}
+.tickets-table th {
+  text-align: left; font-family: var(--sans); font-size: 12px;
+  color: var(--ink-3);
+  padding: 12px 16px; border-bottom: 1px solid var(--line);
+  font-weight: 500; background: var(--surface-2);
+}
+.tickets-table td {
+  padding: 14px 16px; border-bottom: 1px solid var(--line);
+  vertical-align: middle; font-size: 14px;
+}
+.tickets-table tbody tr { cursor: pointer; transition: background 0.1s; }
+.tickets-table tbody tr:hover { background: var(--surface-3); }
+.tickets-table tbody tr:last-child td { border-bottom: none; }
+.tickets-table .col-id { width: 100px; }
+.tickets-table .col-pri, .tickets-table .col-stat { width: 120px; }
+.tickets-table .col-updated { width: 100px; }
+.truncate { max-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.drawer-overlay {
+  position: fixed; inset: 0; background: rgba(10,10,10,0.4);
+  z-index: 50; opacity: 0; pointer-events: none; transition: opacity 0.2s;
+  backdrop-filter: blur(2px);
+}
+.drawer-overlay.open { opacity: 1; pointer-events: auto; }
+.drawer {
+  position: fixed; top: 0; right: 0; bottom: 0;
+  width: 580px; max-width: 100%;
+  background: var(--surface); border-left: 1px solid var(--line);
+  z-index: 51; transform: translateX(100%);
+  transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+  display: flex; flex-direction: column;
+}
+.drawer.open { transform: translateX(0); }
+.drawer-head { padding: 24px 28px 20px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
+.drawer-head .close {
+  float: right; font-size: 18px; color: var(--ink-3);
+  width: 32px; height: 32px; display: grid; place-items: center; line-height: 1;
+  border-radius: var(--r-md); transition: all 0.15s;
+}
+.drawer-head .close:hover { color: var(--ink); background: var(--surface-2); }
+.drawer-title {
+  font-size: 22px; font-weight: 600; line-height: 1.3;
+  letter-spacing: -0.02em; margin-bottom: 12px;
+}
+.drawer-body { flex: 1; overflow-y: auto; padding: 24px 28px 32px; }
+.meta-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 18px 24px;
+  margin: 4px 0 28px; padding: 20px 0;
+  border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+}
+.meta-row .meta-label {
+  font-family: var(--sans); font-size: 12px;
+  color: var(--ink-3); margin-bottom: 6px; font-weight: 500;
+}
+.meta-row .meta-value { font-size: 14px; color: var(--ink); line-height: 1.45; }
+.inline-select {
+  background: var(--surface); border: 1px solid var(--line-strong);
+  padding: 7px 11px; font-size: 13px; width: 100%;
+  font-family: var(--sans); color: var(--ink);
+  border-radius: var(--r-md);
+  appearance: none; -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5L6 7.5L9 4.5' stroke='%23737373' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center;
+  padding-right: 28px; cursor: pointer;
+}
+.inline-select:focus { outline: none; border-color: var(--ink); box-shadow: 0 0 0 3px rgba(10,10,10,0.06); }
+
+.desc-block {
+  background: var(--surface-2); padding: 16px 18px; font-size: 14px;
+  white-space: pre-wrap; line-height: 1.6; color: var(--ink);
+  border-radius: var(--r-md); margin-bottom: 28px;
+}
+.comments-list { display: flex; flex-direction: column; gap: 12px; margin: 12px 0 24px; }
+.comment {
+  background: var(--surface); border: 1px solid var(--line);
+  padding: 14px 16px; border-radius: var(--r-md);
+}
+.comment-meta { font-family: var(--sans); font-size: 12px; color: var(--ink-3); margin-bottom: 6px; }
+.comment-meta .author { color: var(--ink); font-weight: 500; }
+.comment-body { font-size: 14px; white-space: pre-wrap; line-height: 1.55; color: var(--ink); }
+
+.reply-box .textarea { min-height: 84px; }
+.reply-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 10px; }
+
+@media (max-width: 760px) {
+  .tickets-table .col-pri,
+  .tickets-table .col-stat,
+  .tickets-table .col-updated { display: none; }
+  .drawer { width: 100%; }
+  .topbar { padding: 16px 20px; }
+  .main { padding: 24px 20px; }
+}
+</style>
+</head>
+<body>
+
+<div class="app" id="app"></div>
+<div class="drawer-overlay" id="overlay"></div>
+<div class="drawer" id="drawer"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+// ============================================================================
+// CONFIG - paste your Supabase project values here (same as submit.html)
+// ============================================================================
+const SUPABASE_URL      = 'https://xqthyetsktfumudiizdb.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhxdGh5ZXRza3RmdW11ZGlpemRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkzNjQ5NzYsImV4cCI6MjA5NDk0MDk3Nn0.JsucXOp1atPVOsr0fbWXMK8Tb43Ag9snRgQ_Lbf5u0c';
+// ============================================================================
+
+const app     = document.getElementById('app');
+const drawer  = document.getElementById('drawer');
+const overlay = document.getElementById('overlay');
+
+if (SUPABASE_URL.startsWith('YOUR_') || SUPABASE_ANON_KEY.startsWith('YOUR_')) {
+  app.innerHTML = `
+    <main class="main main-narrow" style="padding-top: 80px;">
+      <h1 class="section-title">Setup needed.</h1>
+      <p class="section-lede">
+        Open <code style="font-family:var(--mono); background:var(--surface-2); padding:2px 6px;">staff.html</code>
+        and paste your Supabase project URL and anon key at the top of the script.
+        See <code style="font-family:var(--mono); background:var(--surface-2); padding:2px 6px;">README.md</code> for the walkthrough.
+      </p>
+    </main>
+  `;
+  throw new Error('Config required.');
+}
+
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const state = {
+  user: null, tickets: [], comments: [], staff: [], activeTicket: null,
+  filters: { status: 'all', search: '', priority: 'all', category: 'all', assignee: 'all' }
+};
+
+const STATUSES   = ['open', 'in_progress', 'closed'];
+const PRIORITIES = ['low', 'medium', 'high', 'urgent'];
+const CATEGORIES = ['Hardware', 'Software', 'Network', 'Access / Account', 'Other'];
+const STATUS_LABELS = { open: 'Open', in_progress: 'In progress', closed: 'Closed' };
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+function timeAgo(iso) {
+  const sec = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (sec < 60)       return 'just now';
+  if (sec < 3600)     return Math.floor(sec / 60)    + 'm ago';
+  if (sec < 86400)    return Math.floor(sec / 3600)  + 'h ago';
+  if (sec < 86400*7)  return Math.floor(sec / 86400) + 'd ago';
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+function pad4(n) { return String(n).padStart(4, '0'); }
+
+async function init() {
+  const { data: { session } } = await db.auth.getSession();
+  state.user = session?.user || null;
+  if (!state.user) { renderLogin(); return; }
+  await loadAll();
+  renderApp();
+  subscribe();
+}
+
+async function loadAll() {
+  const [t, s] = await Promise.all([
+    db.from('tickets').select('*').order('created_at', { ascending: false }),
+    db.from('staff').select('*').order('name', { ascending: true })
+  ]);
+  state.tickets = t.data || [];
+  state.staff   = s.data || [];
+}
+
+async function loadComments(ticketId) {
+  const { data } = await db.from('comments').select('*')
+    .eq('ticket_id', ticketId).order('created_at', { ascending: true });
+  state.comments = data || [];
+}
+
+function subscribe() {
+  db.channel('helpdesk-realtime')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'tickets' }, async () => {
+      const { data } = await db.from('tickets').select('*').order('created_at', { ascending: false });
+      state.tickets = data || [];
+      if (state.activeTicket) {
+        const u = state.tickets.find(t => t.id === state.activeTicket.id);
+        if (u) { state.activeTicket = u; renderDrawer(); }
+      }
+      renderApp();
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'comments' }, async () => {
+      if (state.activeTicket) {
+        await loadComments(state.activeTicket.id);
+        renderDrawer();
+      }
+    })
+    .subscribe();
+}
+
+function renderLogin(err) {
+  app.innerHTML = `
+    <div class="login-shell">
+      <div>
+        <div style="text-align: center; margin-bottom: 24px;">
+          <div class="brand" style="justify-content: center;">
+            <span class="mark">Helpdesk</span>
+            <span class="sub">Staff sign-in</span>
+          </div>
+        </div>
+        <div class="login-card">
+          ${err ? `<div class="flash flash-error">${esc(err)}</div>` : ''}
+          <form id="loginForm">
+            <div class="field">
+              <label for="email">Email</label>
+              <input class="input" id="email" name="email" type="email" required autocomplete="username">
+            </div>
+            <div class="field">
+              <label for="password">Password</label>
+              <input class="input" id="password" name="password" type="password" required autocomplete="current-password">
+            </div>
+            <button type="submit" class="btn btn-accent" style="width:100%; justify-content:center;" id="loginBtn">Sign in</button>
+          </form>
+          <p style="margin-top: 18px; font-size: 11px; color: var(--ink-3); text-align: center; line-height: 1.5;">
+            New IT staff? Add accounts in your Supabase project under<br>Authentication → Users.
+          </p>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('loginBtn');
+    btn.disabled = true; btn.textContent = 'Signing in…';
+    const { error } = await db.auth.signInWithPassword({
+      email: e.target.email.value, password: e.target.password.value
+    });
+    if (error) { renderLogin(error.message); return; }
+    state.user = (await db.auth.getUser()).data.user;
+    await loadAll();
+    renderApp();
+    subscribe();
+  });
+}
+
+async function signOut() {
+  await db.auth.signOut();
+  state.user = null; state.tickets = []; state.comments = []; state.activeTicket = null;
+  closeDrawer();
+  renderLogin();
+}
+
+function filteredTickets() {
+  const f = state.filters;
+  const q = f.search.trim().toLowerCase();
+  return state.tickets.filter(t => {
+    if (f.status !== 'all' && t.status !== f.status) return false;
+    if (f.priority !== 'all' && t.priority !== f.priority) return false;
+    if (f.category !== 'all' && t.category !== f.category) return false;
+    if (f.assignee !== 'all') {
+      if (f.assignee === '__unassigned__' && t.assignee) return false;
+      if (f.assignee !== '__unassigned__' && t.assignee !== f.assignee) return false;
+    }
+    if (q) {
+      const hay = [t.title, t.description, t.submitter_name, t.submitter_email, 'T-' + pad4(t.ticket_number)]
+        .join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+function counts() {
+  return {
+    all: state.tickets.length,
+    open: state.tickets.filter(t => t.status === 'open').length,
+    in_progress: state.tickets.filter(t => t.status === 'in_progress').length,
+    closed: state.tickets.filter(t => t.status === 'closed').length
+  };
+}
+
+function renderApp() {
+  const c = counts();
+  const tickets = filteredTickets();
+
+  const prevFocus = document.activeElement?.id;
+  const prevCursor = prevFocus === 'searchInput'
+    ? document.activeElement.selectionStart : null;
+
+  app.innerHTML = `
+    <header class="topbar">
+      <div class="brand">
+        <span class="mark">Helpdesk</span>
+        <span class="sub">Staff dashboard</span>
+      </div>
+      <div class="topbar-right">
+        <span class="topbar-user">${esc(state.user.email)}</span>
+        <button class="btn btn-ghost btn-sm" id="signOut">Sign out</button>
+      </div>
+    </header>
+
+    <main class="main">
+      <div class="stats-strip">
+        ${[
+          ['all', 'All', c.all],
+          ['open', 'Open', c.open],
+          ['in_progress', 'In progress', c.in_progress],
+          ['closed', 'Closed', c.closed]
+        ].map(([key, label, val]) => `
+          <button class="stat-tile ${state.filters.status===key?'active':''}" data-status="${key}">
+            <div class="stat-value">${val}</div>
+            <div class="stat-label">${label}</div>
+          </button>
+        `).join('')}
+      </div>
+
+      <div class="toolbar">
+        <input class="input search" id="searchInput" placeholder="Search by subject, description, submitter, or T-…"
+          value="${esc(state.filters.search)}">
+        <select class="select" id="filterPriority">
+          <option value="all">All priorities</option>
+          ${PRIORITIES.map(p => `<option value="${p}" ${state.filters.priority===p?'selected':''}>${p}</option>`).join('')}
+        </select>
+        <select class="select" id="filterCategory">
+          <option value="all">All categories</option>
+          ${CATEGORIES.map(cat => `<option value="${esc(cat)}" ${state.filters.category===cat?'selected':''}>${esc(cat)}</option>`).join('')}
+        </select>
+        <select class="select" id="filterAssignee">
+          <option value="all">All assignees</option>
+          <option value="__unassigned__" ${state.filters.assignee==='__unassigned__'?'selected':''}>Unassigned</option>
+          ${state.staff.map(s => `<option value="${esc(s.name)}" ${state.filters.assignee===s.name?'selected':''}>${esc(s.name)}</option>`).join('')}
+        </select>
+      </div>
+
+      ${state.tickets.length === 0 ? `
+        <div class="empty">No tickets yet.<br><span class="tnum">Submit one via submit.html to test.</span></div>
+      ` : tickets.length === 0 ? `
+        <div class="empty">No tickets match these filters.</div>
+      ` : `
+        <table class="tickets-table">
+          <thead>
+            <tr>
+              <th class="col-id">Ticket</th>
+              <th>Subject</th>
+              <th>From</th>
+              <th class="col-pri">Priority</th>
+              <th class="col-stat">Status</th>
+              <th>Assignee</th>
+              <th class="col-updated">Updated</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tickets.map(t => `
+              <tr data-id="${esc(t.id)}">
+                <td class="col-id"><span class="tnum">T-${pad4(t.ticket_number)}</span></td>
+                <td class="truncate" style="max-width: 260px;">${esc(t.title)}</td>
+                <td class="truncate" style="max-width: 150px;">${esc(t.submitter_name)}</td>
+                <td class="col-pri"><span class="pill pill-priority-${t.priority}">${t.priority}</span></td>
+                <td class="col-stat"><span class="pill pill-status-${t.status}">${STATUS_LABELS[t.status]}</span></td>
+                <td class="truncate" style="max-width: 140px;">${t.assignee ? esc(t.assignee) : '<span class="tnum">—</span>'}</td>
+                <td class="col-updated"><span class="tnum">${timeAgo(t.updated_at)}</span></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `}
+    </main>
+  `;
+
+  document.getElementById('signOut').addEventListener('click', signOut);
+  document.querySelectorAll('.stat-tile').forEach(b => {
+    b.addEventListener('click', () => { state.filters.status = b.dataset.status; renderApp(); });
+  });
+  document.getElementById('searchInput').addEventListener('input', (e) => {
+    state.filters.search = e.target.value; renderApp();
+  });
+  document.getElementById('filterPriority').addEventListener('change', (e) => {
+    state.filters.priority = e.target.value; renderApp();
+  });
+  document.getElementById('filterCategory').addEventListener('change', (e) => {
+    state.filters.category = e.target.value; renderApp();
+  });
+  document.getElementById('filterAssignee').addEventListener('change', (e) => {
+    state.filters.assignee = e.target.value; renderApp();
+  });
+  document.querySelectorAll('.tickets-table tbody tr').forEach(tr => {
+    tr.addEventListener('click', () => openTicket(tr.dataset.id));
+  });
+
+  if (prevFocus === 'searchInput') {
+    const el = document.getElementById('searchInput');
+    el.focus();
+    if (prevCursor != null) el.setSelectionRange(prevCursor, prevCursor);
+  }
+}
+
+async function openTicket(id) {
+  const t = state.tickets.find(x => x.id === id);
+  if (!t) return;
+  state.activeTicket = t;
+  await loadComments(id);
+  renderDrawer();
+  drawer.classList.add('open');
+  overlay.classList.add('open');
+}
+
+function closeDrawer() {
+  drawer.classList.remove('open');
+  overlay.classList.remove('open');
+  state.activeTicket = null;
+  state.comments = [];
+}
+
+function renderDrawer() {
+  if (!state.activeTicket) return;
+  const t = state.activeTicket;
+  drawer.innerHTML = `
+    <div class="drawer-head">
+      <button class="close" id="drawerClose" aria-label="Close">×</button>
+      <div class="tnum" style="margin-bottom: 6px;">T-${pad4(t.ticket_number)} · ${esc(t.category)}</div>
+      <h2 class="drawer-title">${esc(t.title)}</h2>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <span class="pill pill-status-${t.status}">${STATUS_LABELS[t.status]}</span>
+        <span class="pill pill-priority-${t.priority}">${t.priority}</span>
+      </div>
+    </div>
+    <div class="drawer-body">
+      <div class="meta-grid">
+        <div class="meta-row">
+          <div class="meta-label">From</div>
+          <div class="meta-value">
+            ${esc(t.submitter_name)}<br>
+            <span class="tnum"><a href="mailto:${esc(t.submitter_email)}">${esc(t.submitter_email)}</a></span>
+          </div>
+        </div>
+        <div class="meta-row">
+          <div class="meta-label">Submitted</div>
+          <div class="meta-value">${new Date(t.created_at).toLocaleString()}</div>
+        </div>
+        <div class="meta-row">
+          <div class="meta-label">Status</div>
+          <select class="inline-select" id="updateStatus">
+            ${STATUSES.map(s => `<option value="${s}" ${t.status===s?'selected':''}>${STATUS_LABELS[s]}</option>`).join('')}
+          </select>
+        </div>
+        <div class="meta-row">
+          <div class="meta-label">Priority</div>
+          <select class="inline-select" id="updatePriority">
+            ${PRIORITIES.map(p => `<option value="${p}" ${t.priority===p?'selected':''}>${p}</option>`).join('')}
+          </select>
+        </div>
+        <div class="meta-row" style="grid-column: span 2;">
+          <div class="meta-label">Assignee</div>
+          <select class="inline-select" id="updateAssignee">
+            <option value="">— Unassigned —</option>
+            ${state.staff.map(s => `<option value="${esc(s.name)}" ${t.assignee===s.name?'selected':''}>${esc(s.name)}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+
+      <div class="eyebrow">Description</div>
+      <div class="desc-block">${esc(t.description)}</div>
+
+      <div class="eyebrow">Internal notes &amp; updates</div>
+      <div class="comments-list">
+        ${state.comments.length === 0
+          ? '<div class="tnum" style="padding: 6px 0;">No comments yet.</div>'
+          : state.comments.map(c => `
+            <div class="comment">
+              <div class="comment-meta">
+                <span class="author">${esc(c.author)}</span> · ${timeAgo(c.created_at)}
+              </div>
+              <div class="comment-body">${esc(c.body)}</div>
+            </div>
+          `).join('')
+        }
+      </div>
+
+      <form class="reply-box" id="replyForm">
+        <textarea class="textarea" id="replyText" placeholder="Add an internal note or status update…" required maxlength="4000"></textarea>
+        <div class="reply-actions">
+          <button type="button" class="btn btn-ghost btn-sm" id="cancelReply">Clear</button>
+          <button type="submit" class="btn btn-sm" id="sendReply">Post comment</button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  document.getElementById('drawerClose').addEventListener('click', closeDrawer);
+  document.getElementById('updateStatus').addEventListener('change', (e) => updateTicket({ status: e.target.value }));
+  document.getElementById('updatePriority').addEventListener('change', (e) => updateTicket({ priority: e.target.value }));
+  document.getElementById('updateAssignee').addEventListener('change', (e) => updateTicket({ assignee: e.target.value || null }));
+  document.getElementById('cancelReply').addEventListener('click', () => { document.getElementById('replyText').value = ''; });
+  document.getElementById('replyForm').addEventListener('submit', onReply);
+}
+
+async function updateTicket(patch) {
+  const t = state.activeTicket;
+  if (!t) return;
+  const { data, error } = await db.from('tickets').update(patch).eq('id', t.id).select().single();
+  if (error) { alert('Update failed: ' + error.message); return; }
+  state.activeTicket = data;
+  const idx = state.tickets.findIndex(x => x.id === t.id);
+  if (idx >= 0) state.tickets[idx] = data;
+  renderApp();
+  renderDrawer();
+}
+
+async function onReply(e) {
+  e.preventDefault();
+  const body = document.getElementById('replyText').value.trim();
+  if (!body) return;
+  const btn = document.getElementById('sendReply');
+  btn.disabled = true; btn.textContent = 'Posting…';
+  const { error } = await db.from('comments').insert({
+    ticket_id: state.activeTicket.id, author: state.user.email, body
+  });
+  if (error) {
+    alert('Post failed: ' + error.message);
+    btn.disabled = false; btn.textContent = 'Post comment';
+    return;
+  }
+  document.getElementById('replyText').value = '';
+  // Re-update the ticket so updated_at refreshes (trigger overwrites with server time)
+  await db.from('tickets').update({ status: state.activeTicket.status }).eq('id', state.activeTicket.id);
+  await loadComments(state.activeTicket.id);
+  renderDrawer();
+}
+
+overlay.addEventListener('click', closeDrawer);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDrawer(); });
+
+db.auth.onAuthStateChange((event) => {
+  if (event === 'SIGNED_OUT') {
+    state.user = null; closeDrawer(); renderLogin();
+  }
+});
+
+init();
+</script>
+</body>
+</html>
